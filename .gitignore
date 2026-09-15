@@ -1,0 +1,120 @@
+# =========================
+# AICrediFlux Git Ignore
+# Keep the public repository focused on reproducible code, scripts, and eval datasets.
+# Local study notes, generated reports, secrets, build outputs, and runtime files stay local.
+# =========================
+
+# Local documentation and generated evaluation reports
+docs/
+
+# Logs and runtime output
+logs/
+temp/
+upload/
+*.log
+*.pid
+*.tmp
+*.cache
+*.diff
+*.patch
+
+# Accidental shell artifacts
+-CampaignIds
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+application-dev-confidential.yml
+application-test-confidential.yml
+application-test-confidential-*.yml
+**/application-*-confidential.yml
+
+# Frontend local dependencies and generated files
+node_modules/
+dist/
+.eslintcache
+.eslintrc-auto-import.json
+auto-imports.d.ts
+components.d.ts
+
+# Keep harmless frontend env templates/configs if present
+!aicrediflux-token-web/.env.dev
+!aicrediflux-token-web/.env.production
+
+# Backend build output
+.target/
+target/
+build/
+.factorypath
+.flattened-pom.xml
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/timing.properties
+.mvn/wrapper/maven-wrapper.jar
+
+# Gradle, Go, cache leftovers from experiments
+.gradle/
+.gocache
+.gocache-temp
+.gomodcache/
+.gomodcache
+.gopath
+tiktoken_cache
+.cache
+.test
+/__debug_bin*
+token_estimator_test.go
+skills-lock.json
+.playwright-mcp
+
+# JMeter generated results and local credentials
+scripts/jmeter/users.csv
+scripts/jmeter/accounts.csv
+scripts/jmeter/results/
+scripts/agent/results/
+
+# Local planning / AI assistant workspace
+plans/
+.history/
+ai-docs/
+yaoshu-docs/
+go-legacy/
+react-legacy/
+.dev-pids.json
+.zed/
+.trae/
+.claude/
+.cursor/
+.qoder/
+.openclaw/
+.lingma/
+.codebuddy/
+AI协同矩阵/
+AI协同矩阵-设计时/
+.agents/skills/
+
+# IDE
+.idea/
+*.ipr
+*.iml
+*.iws
+rebel.xml
+.project
+.classpath
+.settings/
+.sts4-cache/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Local databases / binaries
+*.db
+*.db-journal
+*.exe

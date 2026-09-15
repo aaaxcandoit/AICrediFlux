@@ -1,0 +1,9 @@
+package aicrediflux.token.relay.channel.volcengine;
+import lombok.extern.slf4j.Slf4j; import aicrediflux.token.relay.channel.openai.OpenAIAdaptor; import aicrediflux.token.relay.common.RelayInfo;
+import java.util.*; @Slf4j public class VolcEngineAdaptor extends OpenAIAdaptor {
+    @Override @SuppressWarnings("unchecked") public Map<String,String> setupRequestHeader(RelayInfo info) throws Exception {
+        Map<String,String> h = super.setupRequestHeader(info); h.put("Authorization","Bearer "+info.getApiKey()); return h;
+    }
+    @Override public List<String> getModelList() { return VolcEngineConstant.MODEL_LIST; }
+    @Override public String getChannelName() { return VolcEngineConstant.CHANNEL_NAME; }
+}

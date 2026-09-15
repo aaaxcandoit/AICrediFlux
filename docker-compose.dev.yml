@@ -1,0 +1,140 @@
+# AICrediFlux development compose
+#
+# Default:
+#   - MySQL
+#   - Redis
+#
+# Optional profiles:
+#   --profile mq   -> RocketMQ namesrv + broker
+#   --profile ai   -> Milvus + etcd + MinIO
+#
+# Backend stays on your local machine / IDE.
+# Connect it to localhost:3306, localhost:6379, localhost:9876, localhost:19530.
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: aicrediflux-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: 123456
+      MYSQL_DATABASE: aicrediflux
+      TZ: Asia/Shanghai
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    command: >
+      --default-authentication-plugin=mysql_native_password
+      --sql-mode=STRICT_TRANS_TABLES,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p123456"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: aicrediflux-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec", "--requirepass", "123456"]
+    volumes:
+      - redis_data:/data
+
+  rocketmq-namesrv:
+    image: apache/rocketmq:5.2.0
+    container_name: aicrediflux-rocketmq-namesrv
+    profiles: ["mq"]
+    restart: unless-stopped
+    ports:
+      - "9876:9876"
+    command: sh mqnamesrv
+    environment:
+      JAVA_OPT_EXT: -Xms256m -Xmx256m -Xmn128m
+
+  rocketmq-store-init:
+    image: apache/rocketmq:5.2.0
+    container_name: aicrediflux-rocketmq-store-init
+    profiles: ["mq"]
+    user: root
+    entrypoint: ["sh", "-c"]
+    command: ["chown -R 3000:3000 /home/rocketmq/store"]
+    volumes:
+      - rocketmq_data:/home/rocketmq/store
+
+  rocketmq-broker:
+    image: apache/rocketmq:5.2.0
+    container_name: aicrediflux-rocketmq-broker
+    profiles: ["mq"]
+    restart: unless-stopped
+    ports:
+      - "10911:10911"
+      - "10909:10909"
+    volumes:
+      - ./rocketmq/broker.dev.conf:/home/rocketmq/broker.conf:ro
+      - rocketmq_data:/home/rocketmq/store
+    command: sh mqbroker -n rocketmq-namesrv:9876 -c /home/rocketmq/broker.conf
+    environment:
+      JAVA_OPT_EXT: -Xms512m -Xmx512m -Xmn256m -XX:-UseContainerSupport
+    depends_on:
+      rocketmq-namesrv:
+        condition: service_started
+      rocketmq-store-init:
+        condition: service_completed_successfully
+
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.0
+    container_name: aicrediflux-etcd
+    profiles: ["ai"]
+    restart: unless-stopped
+    environment:
+      - ETCD_AUTO_COMPACTION_MODE=revision
+      - ETCD_AUTO_COMPACTION_RETENTION=1000
+      - ETCD_QUOTA_BACKEND_BYTES=4294967296
+      - ETCD_SNAPSHOT_COUNT=50000
+    volumes:
+      - etcd_data:/etcd
+    command: etcd -advertise-client-urls=http://127.0.0.1:2379 -listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
+
+  minio:
+    image: minio/minio:latest
+    container_name: aicrediflux-minio
+    profiles: ["ai"]
+    restart: unless-stopped
+    environment:
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/minio_data
+    command: minio server /minio_data --console-address ":9001"
+
+  milvus:
+    image: milvusdb/milvus:v2.6.11
+    container_name: aicrediflux-milvus
+    profiles: ["ai"]
+    restart: unless-stopped
+    command: ["milvus", "run", "standalone"]
+    environment:
+      - ETCD_ENDPOINTS=etcd:2379
+      - MINIO_ADDRESS=minio:9000
+    ports:
+      - "19530:19530"
+      - "9091:9091"
+    volumes:
+      - milvus_data:/var/lib/milvus
+    depends_on:
+      - etcd
+      - minio
+
+volumes:
+  mysql_data:
+  redis_data:
+  rocketmq_data:
+  etcd_data:
+  minio_data:
+  milvus_data:

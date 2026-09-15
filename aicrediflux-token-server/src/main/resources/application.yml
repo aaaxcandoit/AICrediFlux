@@ -1,0 +1,105 @@
+server:
+  port: 9527
+
+spring:
+  application:
+    name: aicrediflux
+  # 排除 Spring Boot MultipartAutoConfiguration：它注册 MultipartConfigElement 到 Tomcat Context，
+  # 导致 Tomcat 在 Filter 链前消费 multipart InputStream。中转 API 自行处理 multipart 透传。
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.web.servlet.MultipartAutoConfiguration
+  ai:
+    openai:
+      api-key: ${aicrediflux.spring-ai.openai.api-key:test-dummy-key-for-dev}
+  flyway:
+    validate-on-migrate: false
+  jackson:
+    serialization:
+      write-dates-as-timestamps: true
+  profiles:
+    group:
+      "dev": "yue-library-web,yue-library-data-mybatis,yue-library-data-redis"
+      "test": "yue-library-web,yue-library-data-mybatis,yue-library-data-redis"
+      "acceptance": "yue-library-web,yue-library-data-mybatis,yue-library-data-redis"
+      "uat": "yue-library-web,yue-library-data-mybatis,yue-library-data-redis"
+      "prod": "yue-library-web,yue-library-data-mybatis,yue-library-data-redis"
+    active: dev,dev-confidential
+    #Spring Boot 启动时会加载application.yml,application-dev.yml,application-dev-confidential.yml.其中 application-dev-confidential.yml 的优先级会覆盖前面的同名配置。
+  security:
+    user:
+      name: ${AICREDIFLUX_ACTUATOR_USER:auth-user}
+      password: ${AICREDIFLUX_ACTUATOR_PASSWORD:change-me-in-prod}
+      roles: actuator-security
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+  packages-to-scan: aicrediflux.token
+  paths-to-match:
+    - /api/**
+    - /v1/**
+    - /v1beta/**
+    - /pg/**
+    - /mj/**
+    - /suno/**
+
+knife4j:
+  enable: true
+  setting:
+    language: zh_cn
+logging:
+  config: classpath:logback-plumelog.xml
+
+yue:
+  exception-handler:
+    enabled: true
+  web:
+    enable-repeatedly-read-servlet-request: true
+    # multipart 请求纯字节缓存：body 可重复读，用于中转 API 透传原始 multipart 字节到上游
+    # 此时需排除 Spring Boot MultipartAutoConfiguration（上方已配置），否则 getParts() 解析失败
+    repeatedly-read:
+      multipart: true
+    enable-global-api-qps-limit: false
+
+############## Sa-Token 配置（Web 登录鉴权，替代 HttpSession） ##############
+sa-token:
+  # Token 名称（Header 中传递的 Key 名称，前端通过响应体取 token 后用此 Header 携带）
+  token-name: aicrediflux
+  # Token 有效期（秒），30 天 = 2592000
+  timeout: 2592000
+  # 是否允许同一账号并发登录
+  is-concurrent: true
+  # 多人登录是否共享同一 Token（false = 各自独立）
+  is-share: false
+  # Token 风格
+  token-style: random-128
+  # 是否输出操作日志
+  is-log: false
+  # 关闭 Cookie 通道：Token 仅通过响应体下发 + Header 传递，不写 Set-Cookie，不读 Cookie
+  is-read-cookie: false
+aicrediflux:
+  rag:
+    enabled: ${AICREDIFLUX_RAG_ENABLED:true}
+    embedding-model: ${AICREDIFLUX_RAG_EMBEDDING_MODEL:}
+    embedding-dimension: ${AICREDIFLUX_RAG_EMBEDDING_DIMENSION:1024}
+    chunk-size: ${AICREDIFLUX_RAG_CHUNK_SIZE:600}
+    chunk-overlap: ${AICREDIFLUX_RAG_CHUNK_OVERLAP:100}
+    top-k: ${AICREDIFLUX_RAG_TOP_K:8}
+    max-file-bytes: ${AICREDIFLUX_RAG_MAX_FILE_BYTES:524288}
+  flash-sale:
+    enabled: ${AICREDIFLUX_FLASH_SALE_ENABLED:true}
+    mq-enabled: ${AICREDIFLUX_FLASH_SALE_MQ_ENABLED:false}
+    mock-payment-enabled: ${AICREDIFLUX_MOCK_PAYMENT_ENABLED:false}
+    outbox-interval-ms: 1000
+    compensation-interval-ms: 30000
+    compensation-initial-delay-ms: 30000
+
+rocketmq:
+  name-server: ${ROCKETMQ_NAME_SERVER:127.0.0.1:9876}
+  producer:
+    group: aicrediflux-flash-sale-producer
+    send-message-timeout: 5000
+

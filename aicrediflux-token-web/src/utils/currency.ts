@@ -1,0 +1,320 @@
+/**
+ * 系统金额与平台记账单位格式化。
+ *
+ * 核心概念：
+ * - 真实金额：套餐售价、支付金额等，继续按 USD/CNY/CUSTOM/TOKENS 配置换算展示。
+ * - AI Credit：钱包余额、额度、调用消耗、用量统计等 quota 字段的统一展示单位。
+ */
+import {
+  useSystemConfigStore,
+  DEFAULT_CURRENCY_CONFIG,
+  type CurrencyConfig
+} from '@/store/modules/system-config'
+
+export interface CurrencyFormatOptions {
+  digitsLarge?: number
+  digitsSmall?: number
+  abbreviate?: boolean
+  minimumNonZero?: number
+}
+
+type DisplayMeta =
+  | {
+      kind: 'currency'
+      symbol: string
+      currencyCode: string
+      exchangeRate: number
+    }
+  | {
+      kind: 'custom'
+      symbol: string
+      exchangeRate: number
+    }
+  | {
+      kind: 'tokens'
+      quotaPerUnit: number
+    }
+
+const DEFAULT_FORMAT_OPTIONS: Required<CurrencyFormatOptions> = {
+  digitsLarge: 2,
+  digitsSmall: 4,
+  abbreviate: true,
+  minimumNonZero: 0
+}
+
+function getConfig(): CurrencyConfig {
+  const store = useSystemConfigStore()
+  return {
+    ...DEFAULT_CURRENCY_CONFIG,
+    ...store.currency
+  }
+}
+
+function getDisplayMeta(config: CurrencyConfig): DisplayMeta {
+  const displayType = config.quotaDisplayType as string
+  switch (displayType) {
+    case 'CNY':
+      return {
+        kind: 'currency',
+        symbol: '¥',
+        currencyCode: 'CNY',
+        exchangeRate: config.usdExchangeRate
+      }
+    case 'CUSTOM':
+      return {
+        kind: 'custom',
+        symbol: config.customCurrencySymbol,
+        exchangeRate: config.customCurrencyExchangeRate
+      }
+    case 'TOKENS':
+      return {
+        kind: 'tokens',
+        quotaPerUnit: config.quotaPerUnit
+      }
+    case 'USD':
+    default:
+      return {
+        kind: 'currency',
+        symbol: '$',
+        currencyCode: 'USD',
+        exchangeRate: 1
+      }
+  }
+}
+
+function getBillingDisplayMeta(config: CurrencyConfig): DisplayMeta {
+  const meta = getDisplayMeta(config)
+  // 仅 tokens 模式在定价场景回落到 USD（无货币含义），其他货币（USD/CNY/CUSTOM）按实际配置
+  if (meta.kind === 'tokens') {
+    return { kind: 'currency', symbol: '$', currencyCode: 'USD', exchangeRate: 1 }
+  }
+  return meta
+}
+
+function mergeOptions(
+  options?: CurrencyFormatOptions
+): Required<CurrencyFormatOptions> {
+  if (!options) return DEFAULT_FORMAT_OPTIONS
+  return {
+    digitsLarge: options.digitsLarge ?? DEFAULT_FORMAT_OPTIONS.digitsLarge,
+    digitsSmall: options.digitsSmall ?? DEFAULT_FORMAT_OPTIONS.digitsSmall,
+    abbreviate: options.abbreviate ?? DEFAULT_FORMAT_OPTIONS.abbreviate,
+    minimumNonZero:
+      options.minimumNonZero ?? DEFAULT_FORMAT_OPTIONS.minimumNonZero
+  }
+}
+
+function removeTrailingZeros(str: string): string {
+  if (!str.includes('.')) return str
+  return str.replace(/(\.[0-9]*?)0+$/, '$1').replace(/\.$/, '')
+}
+
+function formatNumberWithSuffix(
+  value: number,
+  digitsLarge: number,
+  digitsSmall: number,
+  abbreviate: boolean
+): string {
+  const abs = Math.abs(value)
+  if (abbreviate && abs >= 1000) {
+    const result = value / 1000
+    return removeTrailingZeros(result.toFixed(1)) + 'k'
+  }
+  const digits = abs >= 1 ? digitsLarge : digitsSmall
+  return removeTrailingZeros(value.toFixed(digits))
+}
+
+function adjustForMinimum(
+  value: number,
+  digits: number,
+  minimumNonZero: number
+): number {
+  if (value === 0) return value
+  const threshold = minimumNonZero > 0 ? minimumNonZero : Math.pow(10, -digits)
+  const abs = Math.abs(value)
+  if (abs > 0 && abs < threshold) {
+    return value > 0 ? threshold : -threshold
+  }
+  return value
+}
+
+function formatCurrencyValue(
+  value: number,
+  options: Required<CurrencyFormatOptions>,
+  meta: DisplayMeta
+): string {
+  if (meta.kind === 'tokens') {
+    return formatNumberWithSuffix(
+      value,
+      options.digitsLarge,
+      options.digitsSmall,
+      options.abbreviate
+    )
+  }
+
+  const digits = Math.abs(value) >= 1 ? options.digitsLarge : options.digitsSmall
+  const adjustedValue = adjustForMinimum(value, digits, options.minimumNonZero)
+
+  if (meta.kind === 'currency') {
+    return new Intl.NumberFormat(undefined, {
+      style: 'currency',
+      currency: meta.currencyCode,
+      currencyDisplay: 'narrowSymbol',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: digits
+    }).format(adjustedValue)
+  }
+
+  const decimal = new Intl.NumberFormat(undefined, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: digits
+  }).format(adjustedValue)
+
+  return `${meta.symbol} ${decimal}`
+}
+
+/** 获取当前货币配置与显示元信息 */
+export function getCurrencyDisplay() {
+  const config = getConfig()
+  const meta = getDisplayMeta(config)
+  return { config, meta }
+}
+
+/** USD 金额 → 显示货币（余额/配额场景） */
+export function formatCurrencyFromUSD(
+  amountUSD: number | null | undefined,
+  options?: CurrencyFormatOptions
+): string {
+  if (amountUSD == null || Number.isNaN(amountUSD)) return '-'
+
+  const { config, meta } = getCurrencyDisplay()
+  const merged = mergeOptions(options)
+
+  if (meta.kind === 'tokens') {
+    const tokens = amountUSD * config.quotaPerUnit
+    return formatNumberWithSuffix(tokens, 0, merged.digitsSmall, merged.abbreviate)
+  }
+
+  const value = amountUSD * meta.exchangeRate
+  return formatCurrencyValue(value, merged, meta)
+}
+
+/** USD 金额 → 计费货币（定价场景，永不显示 tokens） */
+export function formatBillingCurrencyFromUSD(
+  amountUSD: number | null | undefined,
+  options?: CurrencyFormatOptions
+): string {
+  if (amountUSD == null || Number.isNaN(amountUSD)) return '-'
+
+  const { config } = getCurrencyDisplay()
+  const meta = getBillingDisplayMeta(config)
+  const merged = mergeOptions(options)
+  const value =
+    meta.kind === 'currency' || meta.kind === 'custom'
+      ? amountUSD * meta.exchangeRate
+      : amountUSD
+
+  return formatCurrencyValue(value, merged, meta)
+}
+
+type AiCreditValue = number | string | bigint | null | undefined
+
+function formatGroupedInteger(value: string): string {
+  const trimmed = value.trim()
+  if (!trimmed) return '-'
+  const sign = trimmed.startsWith('-') ? '-' : ''
+  const unsigned = sign ? trimmed.slice(1) : trimmed
+  const integerPart = unsigned.split('.')[0]
+  if (!/^\d+$/.test(integerPart)) return '-'
+  return sign + integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+}
+
+function normalizeAiCreditValue(quota: AiCreditValue): string {
+  if (quota == null) return '-'
+  if (typeof quota === 'bigint') return formatGroupedInteger(quota.toString())
+  if (typeof quota === 'number') {
+    if (!Number.isFinite(quota)) return '-'
+    return formatGroupedInteger(Math.trunc(quota).toString())
+  }
+
+  const trimmed = quota.trim()
+  if (!trimmed) return '-'
+  const numeric = Number(trimmed)
+  if (!Number.isFinite(numeric)) return '-'
+  if (!Number.isSafeInteger(numeric)) return formatGroupedInteger(trimmed)
+  return formatGroupedInteger(Math.trunc(numeric).toString())
+}
+
+/** raw quota → AI Credit 数值。单位由卡片标题、表格列名或上下文文案承载。 */
+export function formatAiCredit(
+  quota: AiCreditValue,
+  options?: CurrencyFormatOptions
+): string {
+  if (quota == null) return '-'
+  const numeric = typeof quota === 'bigint' ? Number(quota) : Number(quota)
+  if (options?.abbreviate && Number.isFinite(numeric) && Number.isSafeInteger(numeric)) {
+    const digitsLarge = options.digitsLarge ?? 0
+    const digitsSmall = options.digitsSmall ?? 0
+    return formatNumberWithSuffix(numeric, digitsLarge, digitsSmall, true)
+  }
+
+  const value = normalizeAiCreditValue(quota)
+  return value
+}
+
+/** raw quota → AI Credit 数值。保留旧函数名，避免大量调用点改名。 */
+export function formatQuotaWithCurrency(
+  quota: AiCreditValue,
+  options?: CurrencyFormatOptions
+): string {
+  return formatAiCredit(quota, options)
+}
+
+/** raw quota → AI Credit 数值。用于 dashboard、调用日志、统计图等消费/用量场景。 */
+export function formatQuotaBilling(
+  quota: AiCreditValue,
+  options?: CurrencyFormatOptions
+): string {
+  return formatAiCredit(quota, options)
+}
+/** 获取当前货币标签 */
+export function getCurrencyLabel(): string {
+  const { config, meta } = getCurrencyDisplay()
+  if (meta.kind === 'tokens') return 'Tokens'
+  switch (config.quotaDisplayType as string) {
+    case 'CNY':
+      return 'CNY'
+    case 'CUSTOM':
+      return meta.kind === 'custom' ? meta.symbol : 'Custom'
+    case 'USD':
+    default:
+      return 'USD'
+  }
+}
+
+/** 是否启用货币显示（非 tokens 模式） */
+export function isCurrencyDisplayEnabled(): boolean {
+  const { meta } = getCurrencyDisplay()
+  return meta.kind !== 'tokens'
+}
+
+const PLAN_CURRENCY_SYMBOLS: Record<string, string> = {
+  CNY: '¥',
+  USD: '$',
+  EUR: '€',
+  GBP: '£',
+  JPY: '¥',
+}
+
+/**
+ * 套餐价格统一格式化（基于套餐自身 currency 字段，非全局货币体系）。
+ * 用于订阅套餐的价格展示，确保卡片/购买弹窗/管理端表格等各处格式一致。
+ */
+export function formatPlanPrice(
+  amount: number | null | undefined,
+  currency: string
+): string {
+  if (amount == null || Number.isNaN(amount)) return '-'
+  const symbol = PLAN_CURRENCY_SYMBOLS[currency] || currency
+  return `${symbol}${amount}`
+}

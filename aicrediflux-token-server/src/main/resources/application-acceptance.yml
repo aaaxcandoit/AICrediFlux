@@ -1,0 +1,46 @@
+spring:
+  config:
+    activate:
+      on-profile: acceptance
+  datasource:
+    dynamic:
+      primary: aicrediflux
+      strict: true
+      datasource:
+        aicrediflux:
+          url: ${AICREDIFLUX_ACCEPTANCE_DB_URL:jdbc:mysql://127.0.0.1:3306/aicrediflux_acceptance?characterEncoding=utf-8&useSSL=false&rewriteBatchedStatements=true&allowPublicKeyRetrieval=true}
+          username: ${AICREDIFLUX_ACCEPTANCE_DB_USERNAME:root}
+          password: ${AICREDIFLUX_ACCEPTANCE_DB_PASSWORD:123456}
+  data:
+    redis:
+      host: ${AICREDIFLUX_ACCEPTANCE_REDIS_HOST:127.0.0.1}
+      port: ${AICREDIFLUX_ACCEPTANCE_REDIS_PORT:6379}
+      password: ${AICREDIFLUX_ACCEPTANCE_REDIS_PASSWORD:123456}
+      database: ${AICREDIFLUX_ACCEPTANCE_REDIS_DATABASE:14}
+
+logging:
+  config: classpath:logback-plumelog-disabled.xml
+
+aicrediflux:
+  flash-sale:
+    enabled: true
+    mq-enabled: true
+    mock-payment-enabled: true
+    redis-prefix: "acceptance:mr:flash:"
+    outbox-interval-ms: 250
+    compensation-interval-ms: 5000
+    compensation-initial-delay-ms: 5000
+    topics:
+      order: mr-flash-sale-order-acceptance
+      close: mr-flash-sale-delay-close-acceptance
+      credit: mr-credit-grant-acceptance
+    consumer-groups:
+      order: aicrediflux-flash-sale-order-acceptance
+      close: aicrediflux-flash-sale-close-acceptance
+      credit: aicrediflux-credit-grant-acceptance
+
+rocketmq:
+  name-server: ${AICREDIFLUX_ACCEPTANCE_ROCKETMQ_NAME_SERVER:127.0.0.1:9876}
+  producer:
+    group: aicrediflux-flash-sale-producer-acceptance
+    send-message-timeout: 5000
