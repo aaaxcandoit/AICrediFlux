@@ -39,7 +39,7 @@ AICrediFlux 是一个面向 AI Gateway 场景的全栈工程实践项目，核�
 - 使用 `requestId`、`sessionNo`、`runNo` 串联模型分发、Agent Run、usage、钱包流水和调用日志。
 - 用户侧统一展示 AI Credit；Token 仅保留为输入输出明细和成本核算依据。
 
-### ⚡ Token 套餐与秒杀交易链路
+### ⚡ Credit 套餐与秒杀交易链路
 
 - 实现 AI Credit 套餐购买、模拟支付、钱包到账和订单状态机。
 - 秒杀链路覆盖 Redis 库存预占、用户去重、异步建单、RocketMQ、Outbox 重试、超时关单和库存回补。
