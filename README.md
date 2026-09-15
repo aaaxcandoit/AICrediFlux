@@ -121,12 +121,12 @@ scripts/eval.ps1            汇总 Agent/JMeter 结果并生成报告
   <img src="./assets/screenshots/rankings.png" alt="模型排行榜" width="100%" />
 </p>
 
-### 📈 调用统计
+### 🧾 调用日志
 
-通过 AI Credit 消耗、请求数、Token 用量、RPM、TPM、成功率和延迟等指标观察平台运行情况。
+按时间、渠道、用户、模型和 API 密钥筛选调用记录，查看耗时、输入/输出 Tokens、AI Credit 消耗、请求 ID 和详情。
 
 <p align="center">
-  <img src="./assets/screenshots/usage-statistics.png" alt="调用统计" width="100%" />
+  <img src="./assets/screenshots/usage-logs.png" alt="调用日志" width="100%" />
 </p>
 
 ---
